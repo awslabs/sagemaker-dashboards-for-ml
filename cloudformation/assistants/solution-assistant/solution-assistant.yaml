@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  sagemaker-ml-dashboards: solution-assistant
+Parameters:
+  ResourceName:
+    Type: String
+    AllowedPattern: '^[a-z0-9\-]+$'
+  ECRRepository:
+    Type: String
+  SageMakerModel:
+    Type: String
+  AddDevelopmentStack:
+    Type: String
+Conditions:
+  AddDevelopmentStack: !Equals [ !Ref AddDevelopmentStack, 'true' ]
+Resources:
+  SolutionAssistant:
+    Type: 'Custom::SolutionAssistant'
+    Properties:
+      ServiceToken: !GetAtt SolutionAssistantLambda.Arn
+      ResourceName: !Ref ResourceName
+      ECRRepository: !Ref ECRRepository
+      SageMakerModel: !Ref SageMakerModel
+  SolutionAssistantLambda:
+    Type: AWS::Lambda::Function
+    DependsOn: SolutionAssistantDeploymentIAMPolicy
+    Properties:
+      Handler: 'index.handler'
+      FunctionName: !Sub '${ResourceName}-solution-assistant'
+      Role: !GetAtt SolutionAssistantIAMRole.Arn
+      Runtime: 'python3.8'
+      Code: ./src
+      Timeout : 60
+  SolutionAssistantIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  SolutionAssistantDeploymentIAMPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${ResourceName}-solution-assistant-deployment-stack-policy
+      Roles:
+        - !Ref SolutionAssistantIAMRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - ecr:DescribeImages
+              - ecr:BatchDeleteImage
+            Resource:
+              - !Sub 'arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ECRRepository}'
+  SolutionAssistantDevelopmentIAMPolicy:
+    Type: AWS::IAM::Policy
+    Condition: AddDevelopmentStack
+    Properties:
+      PolicyName: !Sub ${ResourceName}-solution-assistant-development-stack-policy
+      Roles:
+        - !Ref SolutionAssistantIAMRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - sagemaker:DeleteModel
+            Resource:
+              - !Sub "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:model/${SageMakerModel}"
+          - Effect: Allow
+            Action:
+              - sagemaker:DeleteEndpointConfig
+            Resource:
+              - !Sub "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint-config/${SageMakerModel}"
+          - Effect: Allow
+            Action:
+              - sagemaker:DeleteEndpoint
+            Resource:
+              - !Sub "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/${SageMakerModel}"
+              - !Sub "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint-config/${SageMakerModel}"

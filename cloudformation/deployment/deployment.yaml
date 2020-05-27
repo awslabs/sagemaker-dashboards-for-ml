@@ -1,0 +1,564 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  sagemaker-ml-dashboards: deployment
+Parameters:
+  ResourceName:
+    Type: String
+    AllowedPattern: '^[a-z0-9\-]+$'
+  CustomDomain:
+    Type: String
+    Default: ''
+  ApplicationLoadBalancerSSLCertificate:
+    Type: String
+    Default: ''
+  ApplicationLoadBalancerCIDRWhitelist:
+    Type: String
+    Default: '0.0.0.0/0'
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$'
+  ApplicationLoadBalancerStickySessions:
+    Type: String
+    Default: 'false'
+    AllowedValues: 
+      - 'true'
+      - 'false'
+  AddCognitoAuthentication:
+    Type: String
+    Default: 'true'
+  CognitoAuthenticationSampleUserEmail:
+    Type: String
+    AllowedPattern: '^$|^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+    Default: ''
+  SageMakerModel:
+    Type: String
+  S3Bucket:
+    Type: String
+Conditions:
+  UseCustomDomain: !Not [!Equals [!Ref CustomDomain, '']]
+  AddCognitoAuthentication: !Equals [ !Ref AddCognitoAuthentication, 'true' ]
+  UseSelfSignedSSLCertificate: !Equals [ !Ref ApplicationLoadBalancerSSLCertificate, '' ]
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: '10.0.0.0/16'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+  VpcFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      DeliverLogsPermissionArn: !GetAtt VpcFlowLogIAMRole.Arn
+      LogGroupName: !Sub ${ResourceName}-vpc-flow-log-group
+      ResourceId: !Ref Vpc
+      ResourceType: 'VPC'
+      TrafficType: 'ALL'
+  VpcFlowLogIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - vpc-flow-logs.amazonaws.com
+            Action:
+            - 'sts:AssumeRole'
+  VpcFlowLogIAMPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${ResourceName}-vpc-flow-log-policy
+      Roles:
+        - !Ref VpcFlowLogIAMRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+            Resource:
+              - "*"
+          - Effect: Allow
+            Action:
+              - logs:DescribeLogGroups
+              - logs:CreateLogStream
+              - logs:DescribeLogStreams
+            Resource:
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+          - Effect: Allow
+            Action:
+              - logs:GetLogEvents
+              - logs:PutLogEvents
+            Resource:
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*:log-stream:*"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: 'logs:CreateLogGroup action required * resource'
+  PublicSubnetAz1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: '10.0.0.0/24'
+      AvailabilityZone: !Select
+        - '0'
+        - Fn::GetAZs:
+            !Ref AWS::Region
+  PublicSubnetAz2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: '10.0.1.0/24'
+      AvailabilityZone: !Select
+        - '1'
+        - Fn::GetAZs:
+            !Ref AWS::Region
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+  RouteViaIgw:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+  PublicRouteViaIgw:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref RouteViaIgw
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetAz1
+      RouteTableId: !Ref RouteViaIgw
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetAz2
+      RouteTableId: !Ref RouteViaIgw
+  EcsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ECS Allowed Ports
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - Description: ECS Security Group Ingress HTTP
+          IpProtocol: 'tcp'
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+      SecurityGroupEgress:
+        - Description: ECS Security Group Egress HTTP
+          IpProtocol: 'tcp'
+          FromPort: 80
+          ToPort: 80
+          CidrIp: '0.0.0.0/0'
+        - Description: ECS Security Group Egress HTTPS
+          IpProtocol: 'tcp'
+          FromPort: 443
+          ToPort: 443
+          CidrIp: '0.0.0.0/0'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W5
+            reason: |
+              Since dashboard examples download data from external source,
+              we allow outbound HTTP(S) traffic from this security group.
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB Security Group
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - Description: ALB Security Group Ingress HTTPS
+          IpProtocol: 'tcp'
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref ApplicationLoadBalancerCIDRWhitelist
+        - Description: ALB Security Group Ingress HTTP (re-directed to HTTPS)
+          IpProtocol: 'tcp'
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref ApplicationLoadBalancerCIDRWhitelist
+      SecurityGroupEgress:
+        - Description: ALB Security Group Egress HTTPS to access Amazon Cognito for authentication
+          IpProtocol: 'tcp'
+          FromPort: 443
+          ToPort: 443
+          CidrIp: '0.0.0.0/0'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W5
+            reason: |
+              Open ingress because ALB could be public-facing.
+              Open egress because ALB needs to access Amazon Cognito for authentication.
+  # AlbSecurityGroupHTTPEgress defined separately to avoid circular dependency
+  # between AlbSecurityGroup and EcsSecurityGroup
+  AlbSecurityGroupHTTPEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties: 
+      Description: ALB Security Group Egress HTTP
+      DestinationSecurityGroupId: !Ref EcsSecurityGroup
+      FromPort: 80
+      ToPort: 80
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: 'tcp'
+  DefaultTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref Vpc
+      Port: 80
+      TargetType: 'ip'
+      Protocol: 'HTTP'
+      TargetGroupAttributes:
+        - Key: 'stickiness.enabled'
+          Value: !Ref ApplicationLoadBalancerStickySessions
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      LoadBalancerAttributes:
+        - Key: "access_logs.s3.enabled"
+          Value: "true"
+        - Key: "access_logs.s3.bucket"
+          Value: !Ref S3Bucket
+        - Key: "access_logs.s3.prefix"
+          Value: "logs"
+      SecurityGroups:
+        - !Ref AlbSecurityGroup
+      Subnets:
+        - !Ref PublicSubnetAz1
+        - !Ref PublicSubnetAz2
+      Scheme: 'internet-facing'
+  LoadBalancerHTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Certificates: !If
+        - UseSelfSignedSSLCertificate
+        - - CertificateArn: !GetAtt SelfSignedCertificateStack.Outputs.SelfSignedSSLCertificate
+        - - CertificateArn: !Ref ApplicationLoadBalancerSSLCertificate
+      DefaultActions: !If
+        - AddCognitoAuthentication
+        - - Order: 1
+            Type: 'authenticate-cognito'
+            AuthenticateCognitoConfig:
+              UserPoolArn: !GetAtt CognitoUserPool.Arn
+              UserPoolClientId: !Ref CognitoUserPoolClient
+              UserPoolDomain: !Ref CognitoUserPoolDomain
+          - Order: 2
+            Type: 'forward'
+            TargetGroupArn: !Ref DefaultTargetGroup
+        - - Order: 1
+            Type: 'forward'
+            TargetGroupArn: !Ref DefaultTargetGroup
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 443
+      Protocol: 'HTTPS'
+      SslPolicy: 'ELBSecurityPolicy-TLS-1-2-2017-01'
+  LoadBalancerHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Order: 1
+          Type: 'redirect'
+          RedirectConfig:
+            Host: '#{host}'
+            Path: '/#{path}'
+            Port: '443'
+            Protocol: 'HTTPS'
+            Query: '#{query}'
+            StatusCode: 'HTTP_301'
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: 'HTTP'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W56
+            reason: Only using to re-direct to HTTPS
+  ECRRepository:
+    Type: AWS::ECR::Repository
+  ECSTaskExecutionIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ecs-tasks.amazonaws.com
+            Action:
+            - 'sts:AssumeRole'
+  ECSTaskExecutionIAMPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${ResourceName}-ecs-task-execution-policy
+      Roles:
+        - !Ref ECSTaskExecutionIAMRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+            Resource:
+              - '*'
+          - Effect: Allow
+            Action:
+              - logs:CreateLogStream
+            Resource:
+              - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/*'
+          - Effect: Allow
+            Action:
+              - logs:PutLogEvents
+            Resource:
+              - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/*:log-stream:*'
+          - Effect: Allow
+            Action:
+              - ecr:BatchGetImage
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchCheckLayerAvailability
+            Resource:
+              - !Sub 'arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ECRRepository}'
+          - Effect: Allow
+            Action:
+              - ecr:GetAuthorizationToken
+            Resource:
+              - '*'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: 'ecr:GetAuthorizationToken and logs:CreateLogGroup actions require * resource'
+  ECSTaskIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ecs-tasks.amazonaws.com
+            Action:
+            - 'sts:AssumeRole'
+  ECSTaskIAMPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${ResourceName}-ecs-task-policy
+      Roles:
+        - !Ref ECSTaskIAMRole
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:PutLogEvents
+            Resource:
+              - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/*:log-stream:*'
+          - Effect: Allow
+            Action:
+              - sagemaker:InvokeEndpoint
+            Resource:
+              - !Sub "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/${SageMakerModel}"
+  ECSTaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      ContainerDefinitions:
+        - Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}:latest'
+          LogConfiguration: 
+            LogDriver: 'awslogs'
+            Options: 
+              awslogs-create-group: 'true'
+              awslogs-group: !Sub '/ecs/${ResourceName}'
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: 'ecs'
+          Name: 'dashboard'
+          PortMappings: 
+            - ContainerPort: 80
+              HostPort: 80
+              Protocol: 'tcp'
+      Cpu: '1024'
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionIAMRole.Arn
+      Family: !Sub '${ResourceName}'
+      Memory: '2048'
+      NetworkMode: 'awsvpc'
+      RequiresCompatibilities:
+        - 'FARGATE'
+      TaskRoleArn: !GetAtt ECSTaskIAMRole.Arn
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties: 
+      ClusterName: !Sub '${ResourceName}'
+      ClusterSettings: 
+        - Name: 'containerInsights'
+          Value: 'disabled'      
+  ECSService:
+    Type: 'AWS::ECS::Service'
+    DependsOn: LoadBalancerHTTPSListener
+    Properties:
+      Cluster: !GetAtt ECSCluster.Arn
+      DesiredCount: 0
+      LaunchType: 'FARGATE'
+      LoadBalancers:
+        - ContainerName: 'dashboard'
+          ContainerPort: 80
+          TargetGroupArn: !Ref DefaultTargetGroup
+      NetworkConfiguration:
+        AwsvpcConfiguration: 
+          AssignPublicIp: 'ENABLED'
+          SecurityGroups: 
+            - !Ref EcsSecurityGroup
+          Subnets: 
+            - !Ref PublicSubnetAz1
+            - !Ref PublicSubnetAz2
+      SchedulingStrategy: 'REPLICA'
+      ServiceName: !Sub '${ResourceName}'
+      TaskDefinition: !Ref ECSTaskDefinition
+  SelfSignedCertificateStack:
+    Type: 'AWS::CloudFormation::Stack'
+    Condition: UseSelfSignedSSLCertificate
+    Properties:
+      TemplateURL: ./self-signed-certificate/self-signed-certificate.yaml
+      Parameters:
+        ResourceName: !Ref ResourceName
+  CognitoUserPool:
+    Type: 'AWS::Cognito::UserPool'
+    Condition: AddCognitoAuthentication
+    Properties:
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+        InviteMessageTemplate: 
+          EmailSubject: 'New Dashboard Account'
+          EmailMessage: !Join
+            - '<br>'
+            - - 'Hi there,'
+              - ''
+              - "You've been granted permission to use a dashboard:"
+              - ''
+              - !If
+                - UseCustomDomain
+                - !Sub '${CustomDomain}'
+                - !Sub '${ApplicationLoadBalancer.DNSName}'
+              - ''
+              - "Your username is '<b>{username}</b>' and your temporary password is '<b>{####}</b>'."
+      AutoVerifiedAttributes:
+        - 'email'
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+  CognitoUserPoolDomain:
+    Type: 'AWS::Cognito::UserPoolDomain'
+    Condition: AddCognitoAuthentication
+    Properties:
+      Domain: !GetAtt RandomDomainName.OutputString
+      UserPoolId: !Ref CognitoUserPool
+  CognitoUserPoolUser:
+    Type: 'AWS::Cognito::UserPoolUser'
+    Condition: AddCognitoAuthentication
+    Properties:
+      DesiredDeliveryMediums:
+        - 'EMAIL'
+      UserAttributes:
+        - Name: 'email'
+          Value: !Ref CognitoAuthenticationSampleUserEmail
+      Username: 'dashboard_user'
+      UserPoolId: !Ref CognitoUserPool
+  CognitoUserPoolClient:
+    Type: 'AWS::Cognito::UserPoolClient'
+    Condition: AddCognitoAuthentication
+    Properties:
+      CallbackURLs:
+        - !GetAtt CallbackURL.OutputString
+      AllowedOAuthScopes:
+        - 'openid'
+      GenerateSecret: true
+      AllowedOAuthFlowsUserPoolClient: true
+      SupportedIdentityProviders:
+        - 'COGNITO'
+      UserPoolId: !Ref CognitoUserPool
+      AllowedOAuthFlows:
+        - 'code'
+      ExplicitAuthFlows:
+        - 'ALLOW_REFRESH_TOKEN_AUTH'
+      RefreshTokenValidity: 30
+      PreventUserExistenceErrors: 'ENABLED'
+  CallbackURL:
+    Type: 'Custom::CallbackURL'
+    Properties:
+      ServiceToken: !GetAtt StringFunctionsLambda.Arn
+      Function: 'lower'
+      InputString: !If
+        - UseCustomDomain
+        - !Sub 'https://${CustomDomain}/oauth2/idpresponse'
+        - !Sub 'https://${ApplicationLoadBalancer.DNSName}/oauth2/idpresponse'
+  RandomDomainName:
+    Type: 'Custom::RandomDomainName'
+    Properties:
+      ServiceToken: !GetAtt StringFunctionsLambda.Arn
+      Function: 'random'
+      Length: 32
+  StringFunctionsLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: 'index.handler'
+      FunctionName: !Sub '${ResourceName}StringFunctionsLambda'
+      Role: !GetAtt StringFunctionsLambdaRole.Arn
+      Runtime: 'python3.8'
+      Code: ./string-functions/src
+      Timeout : 60
+  StringFunctionsLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+Outputs:
+  ECRRepository:
+    Value: !Ref ECRRepository
+  ECSCluster:
+    Value: !Ref ECSCluster
+  ECSService:
+    Value: !GetAtt ECSService.Name
+  ApplicationLoadBalancer:
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+  SageMakerModel:
+    Value: !Ref SageMakerModel
+  DashboardURL:
+    Value: !If
+      - UseCustomDomain
+      - !Ref CustomDomain
+      - !GetAtt ApplicationLoadBalancer.DNSName
+  CognitoUsersConsoleURL:
+    Condition: AddCognitoAuthentication
+    Value: !Sub 'https://${AWS::Region}.console.aws.amazon.com/cognito/users?region=${AWS::Region}#/pool/${CognitoUserPool}/users'
+  CognitoUserPool:
+    Value: !If
+      - AddCognitoAuthentication
+      - !Ref CognitoUserPool
+      - ''
+  CognitoUserPoolClient:
+    Value: !If
+      - AddCognitoAuthentication
+      - !Ref CognitoUserPoolClient
+      - ''
+  CognitoUserPoolDomain:
+    Value: !If
+      - AddCognitoAuthentication
+      - !Ref CognitoUserPoolDomain
+      - ''

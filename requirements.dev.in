@@ -1,0 +1,18 @@
+# base packages
+jupyter
+ipykernel
+# dev packages
+pip-tools
+flake8
+mypy
+pylint
+pytest
+# aws packages
+awscli
+boto3
+sagemaker
+# solution packages
+python-dotenv
+torch
+transformers
+pandas

@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  sagemaker-ml-dashboards: deployment: self-signed-certificate
+Parameters:
+  ResourceName:
+    Type: String
+    AllowedPattern: '^[a-z0-9\-]+$'
+Resources:
+  SelfSignedSSLCertificate:
+    Type: 'Custom::SelfSignedCertificateCreate'
+    Properties:
+      ServiceToken: !GetAtt SelfSignedSSLCertificateCreateLambda.Arn
+  SelfSignedSSLCertificateCreateLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: 'create.handler'
+      FunctionName: !Sub '${ResourceName}SelfSignedSSLCertificateCreate'
+      Role: !GetAtt SelfSignedSSLCertificateCreateLambdaRole.Arn
+      Runtime: 'python3.8'
+      Code: ./src
+      Timeout : 60
+  SelfSignedSSLCertificateCreateLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        -
+          PolicyName: !Sub '${ResourceName}SelfSignedSSLCertificateCreateLambdaPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - acm:ImportCertificate
+                Resource:
+                  - '*'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: 'acm:ImportCertificate and acm:AddTagsToCertificate require * resource'
+  SelfSignedSSLCertificateDelete:
+    Type: 'Custom::SelfSignedCertificateDelete'
+    Properties:
+      ServiceToken: !GetAtt SelfSignedSSLCertificateDeleteLambda.Arn
+      CertificateArn: !Ref SelfSignedSSLCertificate
+  SelfSignedSSLCertificateDeleteLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: 'delete.handler'
+      FunctionName: !Sub '${ResourceName}SelfSignedSSLCertificateDelete'
+      Role: !GetAtt SelfSignedSSLCertificateDeleteLambdaRole.Arn
+      Runtime: 'python3.8'
+      Code: ./src
+      Timeout : 60
+  SelfSignedSSLCertificateDeleteLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        -
+          PolicyName: !Sub '${ResourceName}SelfSignedSSLCertificateDeleteLambdaPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - acm:DeleteCertificate
+                Resource:
+                  - !Ref SelfSignedSSLCertificate
+Outputs:
+  SelfSignedSSLCertificate:
+    Value: !Ref SelfSignedSSLCertificate

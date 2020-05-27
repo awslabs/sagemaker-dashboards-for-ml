@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  sagemaker-ml-dashboards: bucket-assistant
+Parameters:
+  ResourceName:
+    Type: String
+    AllowedPattern: '^[a-z0-9\-]+$'
+  S3Bucket:
+    Type: String
+Resources:
+  BucketAssistant:
+    Type: 'Custom::BucketAssistant'
+    Properties:
+      ServiceToken: !GetAtt BucketAssistantLambda.Arn
+      S3Bucket: !Ref S3Bucket
+  BucketAssistantLambda:
+    Type: AWS::Lambda::Function
+    DependsOn: BucketAssistantIAMPolicy
+    Properties:
+      Handler: 'index.handler'
+      FunctionName: !Sub '${ResourceName}-bucket-assistant'
+      Role: !GetAtt BucketAssistantIAMRole.Arn
+      Runtime: 'python3.8'
+      Code: ./src
+      Timeout : 60
+  BucketAssistantIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  BucketAssistantIAMPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${ResourceName}-bucket-assistant-policy
+      Roles:
+        - !Ref BucketAssistantIAMRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource:
+              - !Sub "arn:aws:s3:::${S3Bucket}"
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:AbortMultipartUpload
+            Resource:
+              - !Sub "arn:aws:s3:::${S3Bucket}/*"

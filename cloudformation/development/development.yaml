@@ -1,0 +1,250 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  sagemaker-ml-dashboards: development
+Parameters:
+  ResourceName:
+    Type: String
+    AllowedPattern: '^[a-z0-9\-]+$'
+  SageMakerNotebookInstanceType:
+    Type: String
+    Default: 'ml.t3.medium'
+  SageMakerNotebookGitRepository:
+    Type: String
+  SageMakerNotebookGitUserName:
+    Type: String
+  SageMakerNotebookGitUserEmail:
+    Type: String
+  SageMakerModel:
+    Type: String
+  ECRRepository:
+    Type: String
+  ECSCluster:
+    Type: String
+  ECSService:
+    Type: String
+  DashboardURL:
+    Type: String
+  ApplicationLoadBalancer:
+    Type: String
+  AddCognitoAuthentication:
+    Type: String
+  S3Bucket:
+    Type: String
+Resources:
+  SageMakerIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - sagemaker.amazonaws.com
+            Action:
+            - 'sts:AssumeRole'
+  SageMakerIAMPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${ResourceName}-sagemaker-policy
+      Roles:
+        - !Ref SageMakerIAMRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - sagemaker:CreateModel
+              - sagemaker:DeleteModel
+            Resource:
+              - !Sub "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:model/${SageMakerModel}"
+          - Effect: Allow
+            Action:
+              - sagemaker:DescribeEndpointConfig
+              - sagemaker:CreateEndpointConfig
+              - sagemaker:DeleteEndpointConfig
+            Resource:
+              - !Sub "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint-config/${SageMakerModel}"
+          - Effect: Allow
+            Action:
+              - sagemaker:CreateEndpoint
+              - sagemaker:DescribeEndpoint
+              - sagemaker:DeleteEndpoint
+              - sagemaker:InvokeEndpoint
+              - sagemaker:UpdateEndpoint
+            Resource:
+              - !Sub "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/${SageMakerModel}"
+              - !Sub "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint-config/${SageMakerModel}"
+          # Can add CloudWatch Metrics
+          - Effect: Allow
+            Action:
+              - cloudwatch:PutMetricData
+              - cloudwatch:GetMetricData
+              - cloudwatch:GetMetricStatistics
+              - cloudwatch:ListMetrics
+            Resource:
+              - "*"
+          # Can add Amazon CloudWatch Logs
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+            Resource:
+              - "*"
+          # Can add Amazon CloudWatch Logs
+          - Effect: Allow
+            Action:
+              - logs:CreateLogStream
+              - logs:DescribeLogStreams
+            Resource:
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*"
+          # Can add Amazon CloudWatch Logs
+          - Effect: Allow
+            Action:
+              - logs:GetLogEvents
+              - logs:PutLogEvents
+            Resource:
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/sagemaker/*:log-stream:*"
+          # Can pass the IAM Role to Amazon SageMaker Jobs
+          - Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource:
+              - !GetAtt SageMakerIAMRole.Arn
+            Condition:
+              StringEquals:
+                iam:PassedToService: sagemaker.amazonaws.com
+          # Can get the IAM Role
+          - Effect: Allow
+            Action:
+              - iam:GetRole
+            Resource:
+              - !GetAtt SageMakerIAMRole.Arn
+          # Can list the contents of the Explaining Credit Decisions Amazon S3 Bucket
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource:
+              - !Sub "arn:aws:s3:::${S3Bucket}"
+          # Can get objects from the Explaining Credit Decisions Amazon S3 Bucket
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:AbortMultipartUpload
+            Resource:
+              - !Sub "arn:aws:s3:::${S3Bucket}/*"
+          # Can upload a custom image to the Explaining Credit Decisions Amazon ECR Repository
+          - Effect: Allow
+            Action:
+              - ecr:GetAuthorizationToken
+            Resource:
+              - "*"
+          - Effect: Allow
+            Action:
+              - ecr:CompleteLayerUpload
+              - ecr:UploadLayerPart
+              - ecr:InitiateLayerUpload
+              - ecr:PutImage
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchGetImage
+              - ecr:BatchCheckLayerAvailability
+              - ecr:DescribeImages
+              - ecr:BatchDeleteImage
+            Resource:
+              - !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ECRRepository}"
+              - !Sub "arn:aws:ecr:${AWS::Region}:*:repository/pytorch-inference"
+          - Effect: Allow
+            Action:
+              - ecs:UpdateService
+            Resource:
+              - !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ECSCluster}/${ECSService}"
+          - Effect: Allow
+            Action:
+              - codecommit:BatchGetRepositories
+              - codecommit:CreateRepository
+              - codecommit:GetRepository
+              - codecommit:ListBranches
+              - codecommit:GitPull
+              - codecommit:GitPush
+            Resource:
+              - !Sub "arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:sagemaker-ml-dashboards"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: |
+              A number of actions are resource agnostic, so '*' is used.
+              See 'logs:CreateLogGroup' as an example.
+  SageMakerNotebookInstance:
+    Type: AWS::SageMaker::NotebookInstance
+    Properties:
+      DirectInternetAccess: Enabled
+      InstanceType: !Ref SageMakerNotebookInstanceType
+      LifecycleConfigName: !GetAtt SageMakerNotebookInstanceLifecycleConfig.NotebookInstanceLifecycleConfigName
+      NotebookInstanceName: !Sub ${ResourceName}-notebook
+      RoleArn: !GetAtt SageMakerIAMRole.Arn
+      VolumeSizeInGB: 50
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W1201
+            reason: Solution does not have AWS KMS encryption enabled by default.
+  SageMakerNotebookInstanceLifecycleConfig:
+    Type: AWS::SageMaker::NotebookInstanceLifecycleConfig
+    Properties:
+      NotebookInstanceLifecycleConfigName: !Sub ${ResourceName}-lifecycle-config
+      OnStart:
+        - Content:
+            Fn::Base64: |
+              set -e
+              # install amazon-ecr-credential-helper
+              sudo wget -P /usr/bin https://amazon-ecr-credential-helper-releases.s3.us-east-2.amazonaws.com/0.4.0/linux-amd64/docker-credential-ecr-login
+              sudo chmod +x /usr/bin/docker-credential-ecr-login
+              # update jupyter-server-proxy (in JupyterSystemEnv env)
+              source /home/ec2-user/anaconda3/bin/activate JupyterSystemEnv
+              pip install --upgrade pip==20.0.2
+              pip uninstall -y nbserverproxy || true
+              pip install --upgrade jupyter-server-proxy==1.3.2
+              initctl restart jupyter-server --no-wait
+              # create dashboard env
+              conda create -y --name dashboard python=3.6 pip ipykernel
+              source /home/ec2-user/anaconda3/bin/activate dashboard
+              python -m ipykernel install --user --name dashboard --display-name "conda_dashboard"
+              pip install -r /home/ec2-user/SageMaker/requirements.dev.txt
+      OnCreate:
+        - Content:
+            Fn::Base64: !Sub |
+              set -e
+              # perform following actions as ec2-user
+              sudo -u ec2-user -i <<EOF
+              cd /home/ec2-user/SageMaker
+              # git clone (into non-empty directory)
+              git clone ${SageMakerNotebookGitRepository} tmp
+              mv tmp/* . && mv tmp/.* .  # move all files up a level
+              rm -rf tmp
+              # git config
+              git config --global user.name ${SageMakerNotebookGitUserName}
+              git config --global user.email ${SageMakerNotebookGitUserEmail}
+              # set environment variables via .env file
+              touch .env
+              echo "AWS_ACCOUNT_ID=${AWS::AccountId}" >> .env
+              echo "AWS_REGION=${AWS::Region}" >> .env
+              echo "DASHBOARD_S3_BUCKET=${S3Bucket}" >> .env
+              echo "DASHBOARD_SAGEMAKER_IAM_ROLE=${SageMakerIAMRole.Arn}" >> .env
+              echo "DASHBOARD_SAGEMAKER_MODEL=${SageMakerModel}" >> .env
+              echo "DASHBOARD_ECR_REPOSITORY=${ECRRepository}" >> .env
+              echo "DASHBOARD_ECS_CLUSTER=${ECSCluster}" >> .env
+              echo "DASHBOARD_ECR_SERVICE=${ECSService}" >> .env
+              echo "DASHBOARD_URL=${DashboardURL}" >> .env
+              echo "DASHBOARD_ALB=${ApplicationLoadBalancer}" >> .env
+              echo "DASHBOARD_COGNITO_AUTH=${AddCognitoAuthentication}" >> .env
+              EOF
+Outputs:
+  SageMakerNotebookInstanceURL:
+    Value: !Sub "https://console.aws.amazon.com/sagemaker/home?region=${AWS::Region}#/notebook-instances/openNotebook/${SageMakerNotebookInstance.NotebookInstanceName}?view=classic"
+  SageMakerModel:
+    Value: !Ref SageMakerModel
+    Description: |
+      Although the model is not created during AWS CloudFormation stack creation,
+      this is the name of the Amazon SageMaker Model that will be deployed from the notebook.
