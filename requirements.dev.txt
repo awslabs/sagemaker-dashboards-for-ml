@@ -8,7 +8,7 @@ astroid==2.4.1            # via pylint
 attrs==19.3.0             # via jsonschema, pytest
 awscli==1.18.66           # via -r requirements.dev.in
 backcall==0.1.0           # via ipython
-bleach==3.1.5             # via nbconvert
+bleach==3.3.0             # via nbconvert
 boto3==1.13.16            # via -r requirements.dev.in, sagemaker
 botocore==1.16.16         # via awscli, boto3, s3transfer
 certifi==2020.4.5.1       # via requests
