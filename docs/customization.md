@@ -16,7 +16,7 @@ pip install -r requirements.txt -t ./src/site-packages)
 Using the AWS Command Line Interface, we have a useful function called `package` that helps upload the AWS Lambda function's code and also any AWS CloudFormation nested stacks too. Make sure you replace `<s3-bucket>` and `<s3-prefix>` with an Amazon S3 bucket that you have created in your account.
 
 ```bash
-aws cloudformation package \
+aws --region us-west-2 cloudformation package \
 --template-file ./cloudformation/template.yaml \
 --s3-bucket <s3-bucket> \
 --s3-prefix <s3-prefix> \
@@ -25,7 +25,7 @@ aws cloudformation package \
 
 Add `--debug` if you have any issues at this stage. You can then use the `deploy` function to create the stack.
 
-```
+```bash
 aws cloudformation deploy \
 --stack-name sagemaker-ml-dashboards \
 --template-file ./build/packaged.yaml \
@@ -41,7 +41,7 @@ Sometimes you'll want to override the default parameters so add the following ar
 Any issues at this stage should be debugged by disabling AWS CloudFormation stack rollback and the `create-stack` command should be used instead of `deploy`.
 
 ```bash
-aws cloudformation create-stack \
+aws --region us-west-2 cloudformation create-stack \
 --stack-name sagemaker-ml-dashboards \
 --template-body file://./build/packaged.yaml \
 --capabilities CAPABILITY_IAM \
