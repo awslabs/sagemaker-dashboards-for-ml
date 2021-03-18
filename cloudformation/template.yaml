@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
   (SA0006) - 
   sagemaker-dashboards-for-ml: 
@@ -13,22 +13,22 @@ Parameters:
       constraints because it's used to name resources with restrictions (e.g. Amazon S3 bucket
       names cannot contain capital letters).
     AllowedPattern: '^[a-z0-9\-]+$'
-    ConstraintDescription: 'Only allowed to use lowercase letters, hyphens and/or numbers.'
+    ConstraintDescription: "Only allowed to use lowercase letters, hyphens and/or numbers."
   AddDevelopmentStack:
     Type: String
     Description: |
       Add stack for dashboard development?
       Contains Amazon SageMaker Notebook Instance and associated Amazon S3 Bucket.
-    Default: 'true'
-    AllowedValues: 
-      - 'true'
-      - 'false'
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
   SageMakerNotebookInstanceType:
     Description: |
       Choose the instance type for the Amazon SageMaker Notebook Instance.
       Will only be used if the development stack was added.
     Type: String
-    Default: 'ml.t3.medium'
+    Default: "ml.t3.medium"
   SageMakerNotebookGitRepository:
     Description: |
       Choose the Git repository to clone on the Amazon SageMaker Notebook Instance.
@@ -41,22 +41,22 @@ Parameters:
     Description: |
       Choose the Git user name to use for commits on the Amazon SageMaker Notebook Instance.
     Type: String
-    Default: 'SageMaker Default User'
-    AllowedPattern: '^.+$'
-    ConstraintDescription: 'Must not be blank.'
+    Default: "SageMaker Default User"
+    AllowedPattern: "^.+$"
+    ConstraintDescription: "Must not be blank."
   SageMakerNotebookGitUserEmail:
     Description: |
       Choose the Git user email to use for commits on the Amazon SageMaker Notebook Instance.
       Can be blank.
     Type: String
-    Default: ''
+    Default: ""
   CustomDomain:
     Type: String
     Description: |
       If you intend to host the deployed dashboard on a custom domain or sub-domain (e.g. dashboard.example.com), specify that here.
       Otherwise, leave this blank and the auto-generated Application Load Balancer DNS Name will be used instead.
       When specified, this will be used in authentication callbacks.
-    Default: ''
+    Default: ""
   ApplicationLoadBalancerSSLCertificate:
     Type: String
     Description: |
@@ -64,34 +64,34 @@ Parameters:
       specify the ARN of the AWS Certificate Manager certificate that should be used by the Application Load Balancer for HTTPS connections.
       Otherwise, leave this blank and a self-signed certificate be used instead, but be aware that this will lead to security warnings and should only
       be used for development purposes (not in production).
-    Default: ''
+    Default: ""
   ApplicationLoadBalancerCIDRWhitelist:
     Type: String
     Description: |
       Specify the CIDR IP address range that is allowed to access the dashboard (via the Application Load Balancer).
       Use http://checkip.amazonaws.com/ to find the IP address of your current machine.
       Only use '0.0.0.0/0' if public access is required.
-    Default: '0.0.0.0/0'
+    Default: "0.0.0.0/0"
     AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$'
-    ConstraintDescription: 'Must be a valid CIDR IP.'
+    ConstraintDescription: "Must be a valid CIDR IP."
   ApplicationLoadBalancerStickySessions:
     Type: String
     Description: |
       Use sticky sessions to route all requests in a user session to the same dashboard server.
       Certain dashboard libraries may require this, but Streamlit does not.
-    Default: 'false'
-    AllowedValues: 
-      - 'true'
-      - 'false'
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
   AddCognitoAuthentication:
     Type: String
     Description: |
       Add Amazon Cognito authentication to dashboard?
       With authentication enabled, users access the dashboard with an individually assigned username and password.
-    Default: 'true'
-    AllowedValues: 
-      - 'true'
-      - 'false'
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
   CognitoAuthenticationSampleUserEmail:
     Type: String
     Description: |
@@ -101,8 +101,8 @@ Parameters:
       More users can be created through the Amazon Cognito Console or API.
       See the `CognitoUsersConsoleURL` output of this stack, for a link to the console where new users can be added.
     AllowedPattern: '^$|^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
-    ConstraintDescription: 'Must be a valid email address.'
-    Default: ''
+    ConstraintDescription: "Must be a valid email address."
+    Default: ""
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -155,9 +155,16 @@ Metadata:
         default: Use Amazon Cognito Authentication?
       CognitoAuthenticationSampleUserEmail:
         default: Sample User Email
+Mappings:
+  AWSRegionArch2ELBAccountID:
+    ap-southeast-2:
+      id: 783225319266
+    us-west-2:
+      id: 797873946194
+
 Conditions:
-  AddDevelopmentStack: !Equals [ !Ref AddDevelopmentStack, 'true' ]
-  AddCognitoAuthentication: !Equals [ !Ref AddCognitoAuthentication, 'true' ]
+  AddDevelopmentStack: !Equals [!Ref AddDevelopmentStack, "true"]
+  AddCognitoAuthentication: !Equals [!Ref AddCognitoAuthentication, "true"]
 Resources:
   S3Bucket:
     Type: "AWS::S3::Bucket"
@@ -170,8 +177,7 @@ Resources:
         RestrictPublicBuckets: true
       BucketEncryption:
         ServerSideEncryptionConfiguration:
-          -
-            ServerSideEncryptionByDefault:
+          - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
     Metadata:
       cfn_nag:
@@ -180,32 +186,41 @@ Resources:
             reason: Avoids user having to manually create an Amazon S3 bucket for logs.
           - id: W51
             reason: Current default access policy is sufficient.
-  S3BucketPolicy: 
+  S3BucketPolicy:
     Type: AWS::S3::BucketPolicy
-    Properties: 
+    Properties:
       Bucket: !Ref S3Bucket
       PolicyDocument:
-        Statement: 
+        Statement:
           - Action: "s3:PutObject"
             Effect: "Allow"
             Resource: !Sub "arn:aws:s3:::${S3Bucket}/logs/AWSLogs/${AWS::AccountId}/*"
             Principal:
-              AWS: "arn:aws:iam::797873946194:root"
+              AWS: !Sub
+                - "arn:aws:iam::${ELB_ID}:root"
+                - {
+                    ELB_ID:
+                      !FindInMap [
+                        AWSRegionArch2ELBAccountID,
+                        !Ref "AWS::Region",
+                        id,
+                      ],
+                  }
           - Action: "s3:PutObject"
             Effect: "Allow"
             Resource: !Sub "arn:aws:s3:::${S3Bucket}/logs/AWSLogs/${AWS::AccountId}/*"
             Principal:
               Service: "delivery.logs.amazonaws.com"
             Condition:
-                StringEquals:
-                  s3:x-amz-acl: "bucket-owner-full-control"
+              StringEquals:
+                s3:x-amz-acl: "bucket-owner-full-control"
           - Action: "s3:GetBucketAcl"
             Effect: "Allow"
             Resource: !Sub "arn:aws:s3:::${S3Bucket}"
             Principal:
               Service: "delivery.logs.amazonaws.com"
   DevelopmentStack:
-    Type: 'AWS::CloudFormation::Stack'
+    Type: "AWS::CloudFormation::Stack"
     Condition: AddDevelopmentStack
     Properties:
       TemplateURL: ./development/development.yaml
@@ -224,7 +239,7 @@ Resources:
         AddCognitoAuthentication: !Ref AddCognitoAuthentication
         S3Bucket: !Ref S3Bucket
   DeploymentStack:
-    Type: 'AWS::CloudFormation::Stack'
+    Type: "AWS::CloudFormation::Stack"
     Properties:
       TemplateURL: ./deployment/deployment.yaml
       Parameters:
@@ -238,7 +253,7 @@ Resources:
         SageMakerModel: !Ref ResourceName
         S3Bucket: !Ref S3Bucket
   SolutionAssistant:
-    Type: 'AWS::CloudFormation::Stack'
+    Type: "AWS::CloudFormation::Stack"
     Properties:
       TemplateURL: ./assistants/solution-assistant/solution-assistant.yaml
       Parameters:
@@ -247,7 +262,7 @@ Resources:
         SageMakerModel: !GetAtt DeploymentStack.Outputs.SageMakerModel
         AddDevelopmentStack: !Ref AddDevelopmentStack
   S3BucketAssistant:
-    Type: 'AWS::CloudFormation::Stack'
+    Type: "AWS::CloudFormation::Stack"
     Properties:
       TemplateURL: ./assistants/bucket-assistant/bucket-assistant.yaml
       Parameters:
