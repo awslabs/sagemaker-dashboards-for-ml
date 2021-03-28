@@ -9,7 +9,9 @@ Our AWS CloudFormation template contains a number of custom resources, and each 
 pip install -r requirements.txt -t ./src/site-packages)
 (cd ./cloudformation/deployment/string-functions/ && \
 pip install -r requirements.txt -t ./src/site-packages)
-(cd ./cloudformation/solution-assistant && \
+(cd ./cloudformation/assistants/solution-assistant && \
+pip install -r requirements.txt -t ./src/site-packages)
+(cd ./cloudformation/assistants/bucket-assistant && \
 pip install -r requirements.txt -t ./src/site-packages)
 ```
 
