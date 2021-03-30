@@ -157,10 +157,56 @@ Metadata:
         default: Sample User Email
 Mappings:
   AWSRegionArch2ELBAccountID:
-    ap-southeast-2:
-      id: 783225319266
+    us-east-1:
+      id: 127311923021
+    us-east-2:
+      id: 33677994240
+    us-west-1:
+      id: 27434742980
     us-west-2:
       id: 797873946194
+    af-south-1:
+      id: 98369216593
+    ca-central-1:
+      id: 985666609251
+    eu-central-1:
+      id: 54676820928
+    eu-west-1:
+      id: 156460612806
+    eu-west-2:
+      id: 652711504416
+    eu-south-1:
+      id: 635631232127
+    eu-west-3:
+      id: 9996457667
+    eu-north-1:
+      id: 897822967062
+    ap-east-1:
+      id: 754344448648
+    ap-northeast-1:
+      id: 582318560864
+    ap-northeast-2:
+      id: 600734575887
+    ap-northeast-3:
+      id: 383597477331
+    ap-southeast-1:
+      id: 114774131450
+    ap-southeast-2:
+      id: 783225319266
+    ap-south-1:
+      id: 718504428378
+    me-south-1:
+      id: 76674570225
+    sa-east-1:
+      id: 507241528517
+    us-gov-west-1*:
+      id: 48591011584
+    us-gov-east-1*:
+      id: 190560391635
+    cn-north-1*:
+      id: 638102146993
+    cn-northwest-1*:
+      id: 37604701340
 
 Conditions:
   AddDevelopmentStack: !Equals [!Ref AddDevelopmentStack, "true"]
