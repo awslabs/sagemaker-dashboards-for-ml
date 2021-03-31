@@ -10,29 +10,6 @@ You will also need to have permission to use [AWS CloudFormation](https://aws.am
 
 ## Getting Started
 
-Click on one of the following buttons to *quick create* the AWS CloudFormation Stack:
-
-<table>
-  <tr>
-    <th colspan="3">AWS Region</td>
-    <th>AWS CloudFormation</td>
-  </tr>
-  <tr>
-    <td>US West</td>
-    <td>Oregon</td>
-    <td>us-west-2</td>
-    <td align="center">
-      <a href="https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?templateURL=https://sagemaker-solutions-us-west-2.s3-us-west-2.amazonaws.com/sagemaker-ml-dashboards/build/packaged.yaml&stackName=sagemaker-dashboards-for-ml&param_ResourceName=sagemaker-dashboards-for-ml&param_SageMakerNotebookGitRepository=https://github.com/awslabs/sagemaker-dashboards-for-ml">
-        <img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png">
-      </a>
-    </td>
-  </tr>
-</table>
-
-You can use the default parameters, but check for any required fields that might not be completed. As an example, Amazon Cognito Authentication is enabled by default but you must provide an email address to receive the temporary credentials (i.e. the 'Sample User Email' parameter). After completing the parameters, you should acknowledge the use of the two capabilities at the bottom and click 'Create Stack'. Once stack creation has completed successfully, click the 'SageMakerNotebookInstanceURL' link on the 'Outputs' tab. You'll be signed onto the Amazon SageMaker Notebook Instance and see the Jupyter tree view. Click on the 'example' folder and choose one of the two examples ('nyu-uber-pickups' or 'text-generation'). Within each example you will find a Jupyter Notebook (`*.ipynb`). Open this and follow the instruction inside the notebook.
-
-**Caution**: Cloning this GitHub repository and running the code manually could lead to unexpected issues! Use the AWS CloudFormation template. You'll get an Amazon SageMaker Notebook instance that's been correctly setup and configured to access the other resources in the solution.
-
 ## Contents
 
 * `cloudformation/`
