@@ -66,7 +66,7 @@ py==1.8.1                 # via pytest
 pyasn1==0.4.8             # via rsa
 pycodestyle==2.6.0        # via flake8
 pyflakes==2.2.0           # via flake8
-pygments==2.6.1           # via ipython, jupyter-console, nbconvert, qtconsole
+pygments==2.7.4           # via ipython, jupyter-console, nbconvert, qtconsole
 pylint==2.5.2             # via -r requirements.dev.in
 pyparsing==2.4.7          # via packaging
 pyrsistent==0.16.0        # via jsonschema
@@ -74,13 +74,13 @@ pytest==5.4.2             # via -r requirements.dev.in
 python-dateutil==2.8.1    # via botocore, jupyter-client, pandas
 python-dotenv==0.13.0     # via -r requirements.dev.in
 pytz==2020.1              # via pandas
-pyyaml==5.3.1             # via awscli
+pyyaml==5.4.0             # via awscli
 pyzmq==19.0.1             # via jupyter-client, notebook, qtconsole
 qtconsole==4.7.4          # via jupyter
 qtpy==1.9.0               # via qtconsole
 regex==2020.5.14          # via sacremoses, transformers
 requests==2.23.0          # via transformers
-rsa==3.4.2                # via awscli
+rsa==4.1.0                # via awscli
 s3transfer==0.3.3         # via awscli, boto3
 sacremoses==0.0.43        # via transformers
 sagemaker==1.59.0         # via -r requirements.dev.in
