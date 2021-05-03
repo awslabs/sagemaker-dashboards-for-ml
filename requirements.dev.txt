@@ -80,7 +80,7 @@ qtconsole==4.7.4          # via jupyter
 qtpy==1.9.0               # via qtconsole
 regex==2020.5.14          # via sacremoses, transformers
 requests==2.23.0          # via transformers
-rsa==4.1.0                # via awscli
+rsa==4.7                  # via awscli
 s3transfer==0.3.3         # via awscli, boto3
 sacremoses==0.0.43        # via transformers
 sagemaker==1.59.0         # via -r requirements.dev.in
